@@ -1,32 +1,26 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / ".env")
 
-# ===============================
-#  Segurança / Ambiente
-# ===============================
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "development").lower()
 
-# Em produção (Render) você seta SECRET_KEY via variável de ambiente.
-# Em dev (local) ele usa esse fallback.
-SECRET_KEY = os.environ.get(
-    "SECRET_KEY",
-    "django-insecure-dev-chave-apenas-para-uso-local"
-)
 
-# DEBUG: em produção, defina DEBUG=False nas env vars
+SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key-no-danger-for-local")
+
 DEBUG = os.environ.get("DEBUG", "True") == "True"
 
-# ALLOWED_HOSTS: no Render você pode deixar "*" ou informar o host.
-# Ex.: ALLOWED_HOSTS="email-ai.onrender.com"
-ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
+
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+
+# API de IA (Hugging Face)
+HUGGINGFACE_API_KEY = os.environ.get("HUGGINGFACE_API_KEY")
+HUGGINGFACE_MODEL = os.environ.get("HUGGINGFACE_MODEL", "typeform/distilbert-base-uncased-mnli")
 
 
-# ===============================
-#  Aplicações
-# ===============================
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -40,7 +34,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    # Whitenoise para servir arquivos estáticos em produção (Render)
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -55,7 +48,7 @@ ROOT_URLCONF = 'email_ai.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],  # se quiser pastas de templates globais, coloca aqui
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -70,11 +63,6 @@ TEMPLATES = [
 WSGI_APPLICATION = 'email_ai.wsgi.application'
 
 
-# ===============================
-#  Banco de Dados
-# ===============================
-
-# Para o desafio, SQLite está ok (mesmo no Render).
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -83,29 +71,15 @@ DATABASES = {
 }
 
 
-# ===============================
-#  Validação de Senha
-# ===============================
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',},
 ]
 
 
-# ===============================
-#  Internacionalização
-# ===============================
 
 LANGUAGE_CODE = 'pt-br'
 TIME_ZONE = 'America/Sao_Paulo'
@@ -114,31 +88,24 @@ USE_I18N = True
 USE_TZ = True
 
 
-# ===============================
-#  Arquivos estáticos e mídia
-# ===============================
-
-# Arquivos enviados (não é o foco aqui, mas já deixo pronto)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# URL pública dos estáticos
 STATIC_URL = '/static/'
 
-# Onde o collectstatic vai jogar os arquivos pra produção (Render)
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Pasta de estáticos locais (CSS/JS/imagens do projeto)
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
 
-# Whitenoise storage para compressão e cache busting
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 
-# ===============================
-#  Default primary key
-# ===============================
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

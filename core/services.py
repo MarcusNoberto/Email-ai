@@ -1,14 +1,11 @@
 import io
 from typing import Tuple
-
 from PyPDF2 import PdfReader
-import openai  # se for usar OpenAI
-
+import requests
 from django.conf import settings
+HF_API_KEY = getattr(settings, "HUGGINGFACE_API_KEY", None)
+HF_MODEL = getattr(settings, "HUGGINGFACE_MODEL", "facebook/bart-large-mnli")
 
-
-# Configure sua API Key em settings ou variável de ambiente
-openai.api_key = getattr(settings, 'OPENAI_API_KEY', None)
 
 
 def extract_text_from_file(uploaded_file) -> str:
@@ -50,9 +47,10 @@ def heuristic_classification(text: str) -> str:
     em 'produtivo' ou 'improdutivo'.
     """
 
-    t = text.lower()
+    t = text.lower().strip()
+    words = t.split()
+    word_count = len(words)
 
-    # Sinais fortes de pedido/ação
     action_keywords = [
         "status", "requisição", "requisicao", "protocolo", "chamado", "ticket",
         "erro", "falha", "502", "bug", "problema", "não consigo", "nao consigo",
@@ -62,7 +60,6 @@ def heuristic_classification(text: str) -> str:
         "enviei", "envio em anexo"
     ]
 
-    # Sinais fortes de mensagem social / cortesia
     social_keywords = [
         "feliz natal", "feliz ano novo", "boas festas", "feliz aniversário",
         "feliz aniversario", "parabéns", "parabens",
@@ -70,9 +67,10 @@ def heuristic_classification(text: str) -> str:
         "ótimo final de semana", "otimo final de semana",
         "agradeço", "agradeco", "agradecimentos",
         "muito obrigado", "muito obrigada",
+        "olá", "ola", "oi",
+        "bom dia", "boa tarde", "boa noite",
     ]
 
-    # Ver se é um email com pedido explícito (pergunta, verbo de ação, etc.)
     has_question = "?" in t
     intent_verbs = [
         "poderiam", "poderia", "gostaria", "preciso", "solicito", "solicitamos",
@@ -81,19 +79,24 @@ def heuristic_classification(text: str) -> str:
     ]
     has_intent_verb = any(v in t for v in intent_verbs)
 
-    # 1) Se for claramente social e não tiver sinais de ação → IMPRODUTIVO
-    if any(k in t for k in social_keywords) and not any(k in t for k in action_keywords) and not has_question:
+    has_action_keyword = any(k in t for k in action_keywords)
+    has_social_keyword = any(k in t for k in social_keywords)
+
+    if word_count == 0:
         return "improdutivo"
 
-    # 2) Se falar de erro, status, pagamento, documento, etc. → PRODUTIVO
-    if any(k in t for k in action_keywords):
+    if has_social_keyword and not has_action_keyword and not has_question and not has_intent_verb:
+        return "improdutivo"
+
+    if has_action_keyword:
         return "produtivo"
 
-    # 3) Se tiver pergunta ou verbo de intenção → tende a ser PRODUTIVO
     if has_question or has_intent_verb:
         return "produtivo"
 
-    # 4) Default: considerar produtivo (pra não perder nada importante)
+    if word_count <= 4 and not has_action_keyword and not has_question and not has_intent_verb:
+        return "improdutivo"
+
     return "produtivo"
 
 
@@ -158,53 +161,63 @@ def build_fallback_response(text: str, category: str) -> str:
         "Ficamos à disposição sempre que precisar."
     )
 
+def hf_classify_email(text: str) -> str:
+    """
+    Usa a API de inferência do Hugging Face para classificar o email
+    como 'produtivo' ou 'improdutivo' usando zero-shot classification.
+    Se der erro ou não houver chave, cai na heurística.
+    """
+    if not HF_API_KEY:
+        print("Entrou na heuristica")
+        return heuristic_classification(text)
+
+    url = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+    headers = {"Authorization": f"Bearer {HF_API_KEY}"}
+
+    payload = {
+        "inputs": text,
+        "parameters": {
+            "candidate_labels": ["produtivo", "improdutivo"],
+            "multi_label": False,
+            "hypothesis_template": "Este email é {}."
+        }
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+
+        # Para modelos de classificação zero-shot, normalmente vem assim:
+        # {"labels": [...], "scores": [...]}
+        if isinstance(data, list):
+            data = data[0]
+
+        labels = data.get("labels", [])
+        scores = data.get("scores", [])
+
+        if labels and scores:
+            best_index = scores.index(max(scores))
+            best_label = labels[best_index].lower()
+
+            if "produtivo" in best_label:
+                return "produtivo"
+            if "improdutivo" in best_label:
+                return "improdutivo"
+
+        # Se não conseguir interpretar → heurística
+        return heuristic_classification(text)
+
+    except Exception as e:
+        print("Erro na chamada Hugging Face:", e)
+        return heuristic_classification(text)
+
 
 def ai_classify_and_respond(text: str) -> Tuple[str, str]:
     """
-    Usa IA para classificar e responder.
-    Se não houver API configurada, utiliza apenas a heurística + respostas padrão.
+    Usa Hugging Face para classificar e a nossa lógica para sugerir resposta.
+    Se a API falhar ou não houver chave, cai na heurística pura.
     """
-
-    # Se não tiver chave de API → usa só heurística + fallback
-    if not openai.api_key:
-        categoria = heuristic_classification(text)
-        resposta = build_fallback_response(text, categoria)
-        return categoria, resposta
-
-    # --- A partir daqui é igual à ideia anterior, se quiser manter a chamada à OpenAI ---
-    prompt = f"""
-Você é um assistente de suporte de uma grande empresa financeira.
-
-Leia o email abaixo e:
-1) classifique-o como "produtivo" ou "improdutivo".
-2) gere uma resposta curta e profissional em português.
-
-Responda APENAS em JSON no formato:
-{{"categoria": "...", "resposta": "..."}}
-
-Email:
-\"\"\"{text}\"\"\"
-"""
-
-    completion = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.2,
-    )
-
-    content = completion.choices[0].message["content"]
-
-    import json
-    try:
-        data = json.loads(content)
-        categoria = data.get("categoria", "").lower()
-        if categoria not in ["produtivo", "improdutivo"]:
-            categoria = heuristic_classification(text)
-        resposta = data.get("resposta", "")
-        if not resposta:
-            resposta = build_fallback_response(text, categoria)
-    except Exception:
-        categoria = heuristic_classification(text)
-        resposta = build_fallback_response(text, categoria)
-
+    categoria = hf_classify_email(text)
+    resposta = build_fallback_response(text, categoria)
     return categoria, resposta
