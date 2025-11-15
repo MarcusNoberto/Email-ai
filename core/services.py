@@ -6,8 +6,6 @@ from django.conf import settings
 HF_API_KEY = getattr(settings, "HUGGINGFACE_API_KEY", None)
 HF_MODEL = getattr(settings, "HUGGINGFACE_MODEL", "facebook/bart-large-mnli")
 
-
-
 def extract_text_from_file(uploaded_file) -> str:
     """
     Lê o conteúdo de .txt ou .pdf e retorna o texto.
@@ -30,7 +28,6 @@ def extract_text_from_file(uploaded_file) -> str:
 
     return ""
 
-
 def preprocess_text(text: str) -> str:
     """
     Pré-processamento simples: lower, strip, etc.
@@ -39,7 +36,6 @@ def preprocess_text(text: str) -> str:
     text = text.strip().lower()
     # Aqui você poderia usar spaCy/nltk se quiser impressionar mais
     return text
-
 
 def heuristic_classification(text: str) -> str:
     """
@@ -98,7 +94,6 @@ def heuristic_classification(text: str) -> str:
         return "improdutivo"
 
     return "produtivo"
-
 
 def build_fallback_response(text: str, category: str) -> str:
     """
