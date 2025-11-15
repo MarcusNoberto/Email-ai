@@ -107,5 +107,12 @@ Funciona via **Zero-Shot Classification**:
 Clone o projeto para sua máquina local usando Git:
 
 ```bash
-git clone [https://github.com/seu-usuario/email-ai-classifier.git](https://github.com/seu-usuario/email-ai-classifier.git)
-cd email-ai-classifier
+git clone https://github.com/MarcusNoberto/Email-ai
+
+
+3. Criar o ambiente virtual
+
+4. Instalar dependências
+
+```bash
+pip install -r requirements.txt
