@@ -106,13 +106,20 @@ Funciona via **Zero-Shot Classification**:
 
 Clone o projeto para sua máquina local usando Git:
 
-```bash
+
 git clone https://github.com/MarcusNoberto/Email-ai
 
+## 3. Criar o ambiente virtual
+- Atualizar o .env
 
-3. Criar o ambiente virtual
+## 4. Instalar Dependencias
 
-4. Instalar dependências
+- pip install -r requirements.txt
 
-```bash
-pip install -r requirements.txt
+## 5. Executar migrações do banco
+- python manage.py makemigrations
+- python manage.py migrate
+
+## 6. Rodar o sistema
+- python manage.py runserver
+- http://127.0.0.1:8000/
