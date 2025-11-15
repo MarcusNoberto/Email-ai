@@ -7,9 +7,6 @@ HF_API_KEY = getattr(settings, "HUGGINGFACE_API_KEY", None)
 HF_MODEL = getattr(settings, "HUGGINGFACE_MODEL", "facebook/bart-large-mnli")
 
 def extract_text_from_file(uploaded_file) -> str:
-    """
-    Lê o conteúdo de .txt ou .pdf e retorna o texto.
-    """
     filename = uploaded_file.name.lower()
 
     if filename.endswith('.txt'):
@@ -29,20 +26,10 @@ def extract_text_from_file(uploaded_file) -> str:
     return ""
 
 def preprocess_text(text: str) -> str:
-    """
-    Pré-processamento simples: lower, strip, etc.
-    Você pode adicionar remoção de stopwords, lematização, etc.
-    """
     text = text.strip().lower()
-    # Aqui você poderia usar spaCy/nltk se quiser impressionar mais
     return text
 
 def heuristic_classification(text: str) -> str:
-    """
-    Heurística melhorada para classificar emails
-    em 'produtivo' ou 'improdutivo'.
-    """
-
     t = text.lower().strip()
     words = t.split()
     word_count = len(words)
@@ -96,22 +83,15 @@ def heuristic_classification(text: str) -> str:
     return "produtivo"
 
 def build_fallback_response(text: str, category: str) -> str:
-    """
-    Gera respostas diferentes de acordo com o conteúdo,
-    quando não houver API de IA configurada.
-    """
     t = text.lower()
 
     if category == "produtivo":
-        # Caso 1: pedido de status
         if "status" in t or "requisição" in t or "requisicao" in t or "protocolo" in t:
             return (
                 "Olá! Recebemos sua solicitação de atualização de status e "
                 "já encaminhamos para o time responsável. Assim que tivermos "
                 "uma posição, retornaremos por este canal."
             )
-
-        # Caso 2: problema técnico / erro
         if "erro" in t or "falha" in t or "502" in t or "não consigo" in t or "nao consigo" in t:
             return (
                 "Olá! Identificamos o relato de erro no acesso à plataforma e "
@@ -119,49 +99,33 @@ def build_fallback_response(text: str, category: str) -> str:
                 "e horário aproximado da ocorrência para facilitar a investigação. "
                 "Retornaremos em breve com mais detalhes."
             )
-
-        # Caso 3: envio de comprovante / documento
         if "comprovante" in t or "anexo" in t or "fatura" in t or "boleto" in t or "documento" in t:
             return (
                 "Olá! Recebemos o documento enviado e ele será conferido pelo nosso time. "
                 "Caso seja necessária alguma informação adicional, entraremos em contato "
                 "por este mesmo canal."
             )
-
-        # Genérico produtivo
         return (
             "Olá! Recebemos sua mensagem e ela já está em análise pelo time responsável. "
             "Em breve retornaremos com uma posição mais detalhada sobre a sua solicitação."
         )
-
-    # category == "improdutivo"
-    # Felicitações de festas
     if "feliz natal" in t or "boas festas" in t or "feliz ano novo" in t:
         return (
             "Olá! Muito obrigado pela mensagem e pelos votos. "
             "Desejamos também um excelente período de festas, com muita saúde e prosperidade. "
             "Conte sempre conosco!"
         )
-
-    # Mensagens de agradecimento / elogio / bom final de semana
     if "final de semana" in t or "fim de semana" in t or "obrigado" in t or "obrigada" in t or "parabéns" in t or "parabens" in t:
         return (
             "Olá! Agradecemos muito a sua mensagem e o reconhecimento. "
             "É um prazer poder atender você. Tenha um ótimo dia!"
         )
-
-    # Genérico improdutivo
     return (
         "Olá! Agradecemos a sua mensagem e os votos. "
         "Ficamos à disposição sempre que precisar."
     )
 
 def hf_classify_email(text: str) -> str:
-    """
-    Usa a API de inferência do Hugging Face para classificar o email
-    como 'produtivo' ou 'improdutivo' usando zero-shot classification.
-    Se der erro ou não houver chave, cai na heurística.
-    """
     if not HF_API_KEY:
         print("Entrou na heuristica")
         return heuristic_classification(text)
@@ -182,9 +146,6 @@ def hf_classify_email(text: str) -> str:
         response = requests.post(url, headers=headers, json=payload, timeout=15)
         response.raise_for_status()
         data = response.json()
-
-        # Para modelos de classificação zero-shot, normalmente vem assim:
-        # {"labels": [...], "scores": [...]}
         if isinstance(data, list):
             data = data[0]
 
@@ -199,8 +160,6 @@ def hf_classify_email(text: str) -> str:
                 return "produtivo"
             if "improdutivo" in best_label:
                 return "improdutivo"
-
-        # Se não conseguir interpretar → heurística
         return heuristic_classification(text)
 
     except Exception as e:
@@ -209,10 +168,6 @@ def hf_classify_email(text: str) -> str:
 
 
 def ai_classify_and_respond(text: str) -> Tuple[str, str]:
-    """
-    Usa Hugging Face para classificar e a nossa lógica para sugerir resposta.
-    Se a API falhar ou não houver chave, cai na heurística pura.
-    """
     categoria = hf_classify_email(text)
     resposta = build_fallback_response(text, categoria)
     return categoria, resposta
